@@ -17,21 +17,29 @@ from state_management import HealthcareStateManager
 from memory_manager import HealthcareMemoryManager
 from medical_query_handler import MedicalQueryHandler
 from message_filter import MessageFilter
+from config import get_config
 
 class HealthcareResearchUI:
     """Streamlit UI for Healthcare Research Assistant"""
     
     def __init__(self):
         self.init_session_state()
+        self.config = get_config()
         self.memory_manager = HealthcareMemoryManager()
-        self.query_handler = MedicalQueryHandler()
+        print(f"Streamlit: Creating MedicalQueryHandler with API key: {self.config.GOOGLE_API_KEY[:10] if self.config.GOOGLE_API_KEY else 'None'}...")
+        self.query_handler = MedicalQueryHandler(self.config.GOOGLE_API_KEY)
+        print(f"Streamlit: Query handler created. use_direct_genai: {getattr(self.query_handler, 'use_direct_genai', 'Not set')}")
         self.message_filter = MessageFilter()
         self.state_manager = HealthcareStateManager()
     
     def init_session_state(self):
         """Initialize Streamlit session state"""
         if 'healthcare_state' not in st.session_state:
-            st.session_state.healthcare_state = None
+            st.session_state.healthcare_state = create_initial_state(
+                researcher_id="streamlit_user", 
+                project_id="general_research", 
+                disease_focus="general_medicine"
+            )
         if 'current_session' not in st.session_state:
             st.session_state.current_session = None
         if 'query_history' not in st.session_state:
@@ -276,8 +284,12 @@ class HealthcareResearchUI:
             state = st.session_state.healthcare_state
             state['current_queries'].append(new_query)
             
-            # Process query
-            response = self.query_handler.process_medical_query(new_query)
+            # Show processing message
+            with st.spinner("🔄 Processing your query..."):
+                st.info("Query submitted successfully! Processing in progress...")
+                
+                # Process query
+                response = self.query_handler.process_medical_query(new_query)
             
             # Add to session responses
             state['session_responses'].append(response)
@@ -305,7 +317,7 @@ class HealthcareResearchUI:
             # Update state
             st.session_state.healthcare_state = state
             
-            st.success("✅ Query processed successfully!")
+            st.success("✅ Query processed successfully! Check the Research Results tab to view your results.")
             st.rerun()
             
         except Exception as e:
@@ -317,8 +329,17 @@ class HealthcareResearchUI:
         
         state = st.session_state.healthcare_state
         
+        # Check if there are queries being processed
+        pending_queries = len(state.get('current_queries', [])) - len(state.get('session_responses', []))
+        
+        if pending_queries > 0:
+            # Show loading spinner for pending queries
+            with st.spinner(f"🔄 Processing {pending_queries} query(s)..."):
+                st.info("Your queries are being processed in the background. Results will appear here shortly.")
+        
         if not state['session_responses']:
-            st.info("No research results yet. Submit queries in the Query Interface tab.")
+            if pending_queries == 0:
+                st.info("No research results yet. Submit queries in the Query Interface tab.")
             return
         
         # Display recent responses

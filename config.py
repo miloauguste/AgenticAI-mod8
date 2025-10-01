@@ -120,7 +120,7 @@ class HealthcareConfig:
         """Get LLM configuration"""
         return {
             'api_key': self.GOOGLE_API_KEY,
-            'model': 'gemini-pro',
+            'model': 'gemini-1.5-pro',
             'temperature': 0.1,
             'max_output_tokens': 2048,
             'mock_responses': self.MOCK_EXTERNAL_APIS

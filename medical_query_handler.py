@@ -29,15 +29,51 @@ class MedicalQueryHandler:
         self.api_key = api_key or os.getenv('GOOGLE_API_KEY')
         if self.api_key:
             genai.configure(api_key=self.api_key)
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-pro",
-                google_api_key=self.api_key,
-                temperature=0.1,
-                max_output_tokens=2048
-            )
+            
+            # Use direct genai only to avoid LangChain model compatibility issues
+            self.llm = None
+            self.use_direct_genai = False
+            
+            # Try different model names for direct genai - using actually available models
+            model_names = ['models/gemini-2.5-flash', 'models/gemini-2.5-pro', 'models/gemini-2.0-flash', 'models/gemini-flash-latest']
+            
+            for model_name in model_names:
+                try:
+                    self.genai_model = genai.GenerativeModel(model_name)
+                    self.use_direct_genai = True
+                    print(f"Successfully initialized direct genai with {model_name}")
+                    break
+                except Exception as e:
+                    print(f"Failed to initialize direct genai with {model_name}: {e}")
+                    continue
+            
+            if not self.use_direct_genai:
+                print("Warning: Could not initialize any model. LLM features will be limited.")
         else:
             self.llm = None
             print("Warning: No Google API key provided. LLM features will be limited.")
+    
+    def _generate_response(self, prompt: str) -> str:
+        """Generate response using either LangChain or direct genai"""
+        if self.use_direct_genai and hasattr(self, 'genai_model'):
+            try:
+                print(f"Using direct genai model for response generation")
+                response = self.genai_model.generate_content(prompt)
+                return response.text
+            except Exception as e:
+                print(f"Error with direct genai: {e}")
+                return f"Error generating response: {e}"
+        elif self.llm:
+            try:
+                print(f"Using LangChain model for response generation")
+                response = self.llm.invoke(prompt)
+                return response.content if hasattr(response, 'content') else str(response)
+            except Exception as e:
+                print(f"Error with LangChain: {e}")
+                return f"Error generating response: {e}"
+        else:
+            print(f"No LLM available - use_direct_genai: {getattr(self, 'use_direct_genai', False)}, has genai_model: {hasattr(self, 'genai_model')}, has llm: {self.llm is not None}")
+            return "LLM not available. Please check your API key configuration."
     
     def process_medical_query(self, query: QuerySchema, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """Process a medical query and generate appropriate response"""
@@ -106,7 +142,7 @@ class MedicalQueryHandler:
     
     def _handle_clinical_question(self, query: QuerySchema, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """Handle general clinical questions"""
-        if self.llm:
+        if self.llm or (self.use_direct_genai and hasattr(self, 'genai_model')):
             clinical_response = self._generate_clinical_response(query['query_text'], context)
         else:
             clinical_response = f"Clinical response for: {query['query_text']} (LLM not available)"
@@ -124,7 +160,7 @@ class MedicalQueryHandler:
     
     def _handle_general_medical_query(self, query: QuerySchema, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """Handle general medical queries"""
-        if self.llm:
+        if self.llm or (self.use_direct_genai and hasattr(self, 'genai_model')):
             general_response = self._generate_general_medical_response(query['query_text'], context)
         else:
             general_response = f"General medical response for: {query['query_text']} (LLM not available)"
@@ -246,8 +282,8 @@ class MedicalQueryHandler:
             """
             
             try:
-                response = self.llm.invoke(prompt)
-                key_findings = self._parse_llm_findings(response.content)
+                response_text = self._generate_response(prompt)
+                key_findings = self._parse_llm_findings(response_text)
             except Exception as e:
                 print(f"Error generating summary: {e}")
                 key_findings = ["Error generating detailed findings"]
@@ -295,8 +331,8 @@ class MedicalQueryHandler:
             """
             
             try:
-                response = self.llm.invoke(prompt)
-                comparison_data = self._parse_treatment_comparison(response.content, treatments)
+                response_text = self._generate_response(prompt)
+                comparison_data = self._parse_treatment_comparison(response_text, treatments)
             except Exception as e:
                 print(f"Error generating comparison: {e}")
                 comparison_data = {
@@ -315,7 +351,7 @@ class MedicalQueryHandler:
     
     def _generate_clinical_response(self, query_text: str, context: Dict[str, Any] = None) -> str:
         """Generate clinical response using LLM"""
-        if not self.llm:
+        if not self.llm and not (self.use_direct_genai and hasattr(self, 'genai_model')):
             return f"Clinical guidance for: {query_text}. Please consult current medical literature and guidelines."
         
         context_str = ""
@@ -335,15 +371,15 @@ class MedicalQueryHandler:
         """
         
         try:
-            response = self.llm.invoke(prompt)
-            return response.content
+            response_text = self._generate_response(prompt)
+            return response_text
         except Exception as e:
             print(f"Error generating clinical response: {e}")
             return f"Unable to generate detailed clinical response for: {query_text}"
     
     def _generate_general_medical_response(self, query_text: str, context: Dict[str, Any] = None) -> str:
         """Generate general medical response using LLM"""
-        if not self.llm:
+        if not self.llm and not (self.use_direct_genai and hasattr(self, 'genai_model')):
             return f"General medical information for: {query_text}. Please consult healthcare providers for specific advice."
         
         prompt = f"""
@@ -359,8 +395,8 @@ class MedicalQueryHandler:
         """
         
         try:
-            response = self.llm.invoke(prompt)
-            return response.content
+            response_text = self._generate_response(prompt)
+            return response_text
         except Exception as e:
             print(f"Error generating general response: {e}")
             return f"Please consult medical literature or healthcare providers regarding: {query_text}"

@@ -20,22 +20,30 @@ class MessageFilter:
             # Medical conditions
             "diabetes", "hypertension", "cancer", "covid", "pneumonia", "asthma",
             "arthritis", "depression", "anxiety", "migraine", "copd", "alzheimer",
+            "disease", "syndrome", "disorder", "condition", "illness", "symptom",
             
             # Treatments and interventions
             "treatment", "therapy", "medication", "drug", "surgery", "procedure",
             "intervention", "protocol", "regimen", "dosage", "administration",
+            "cure", "heal", "remedy", "medicine", "pharmaceutical",
             
             # Research terms
             "clinical trial", "study", "research", "meta-analysis", "systematic review",
             "randomized", "controlled", "placebo", "efficacy", "safety",
+            "evidence", "data", "analysis", "findings", "results",
             
             # Medical outcomes
             "mortality", "morbidity", "outcome", "prognosis", "diagnosis", "biomarker",
             "side effects", "adverse events", "complications", "recovery",
+            "symptoms", "pain", "relief", "improvement",
             
             # Healthcare systems
             "patient", "healthcare", "clinical", "hospital", "physician", "nurse",
-            "pharmacist", "medical", "health", "medicine"
+            "pharmacist", "medical", "health", "medicine", "doctor", "clinic",
+            
+            # General medical/health terms
+            "what", "how", "why", "when", "where", "can", "should", "compare",
+            "effective", "best", "recommend", "suggest", "help", "information"
         ]
     
     def _load_filtering_patterns(self) -> List[Dict[str, Any]]:
@@ -102,11 +110,11 @@ class MessageFilter:
         # Check for medical relevance
         medical_score = self._calculate_medical_relevance(cleaned_text)
         
-        if medical_score < 0.1:  # Very low medical relevance
+        if medical_score < 0.01:  # Very low medical relevance - more permissive threshold
             return False, cleaned_text, {
                 "reason": "low_medical_relevance",
                 "medical_score": medical_score,
-                "threshold": 0.1
+                "threshold": 0.01
             }
         
         return True, cleaned_text, {
